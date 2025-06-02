@@ -6,7 +6,7 @@
   ******************************************************************************
   * @attention
   *
-  * Copyright (c) 2025 STMicroelectronics.
+  * Copyright (c) 2024 STMicroelectronics.
   * All rights reserved.
   *
   * This software is licensed under terms that can be found in the LICENSE file
@@ -23,8 +23,8 @@
 /* USER CODE BEGIN Includes */
 #include <stdio.h>
 #include <string.h>
-#include "clcd.h"
 #include "dht.h"
+#include "clcd.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -52,6 +52,7 @@
 
 /* Private variables ---------------------------------------------------------*/
 ADC_HandleTypeDef hadc1;
+DMA_HandleTypeDef hdma_adc1;
 
 I2C_HandleTypeDef hi2c1;
 
@@ -61,25 +62,26 @@ UART_HandleTypeDef huart2;
 UART_HandleTypeDef huart6;
 
 /* USER CODE BEGIN PV */
-__IO uint16_t ADCxConvertValue[2]={0};
-__IO int adcFlag=0;
-
 uint8_t rx2char;
 volatile unsigned char rx2Flag = 0;
 volatile char rx2Data[50];
 volatile unsigned char btFlag = 0;
 uint8_t btchar;
 char btData[50];
+__IO uint16_t ADCxConvertValue[2]={0};
+__IO int adcFlag=0;
+DHT11_TypeDef dht11Data;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
+static void MX_DMA_Init(void);
 static void MX_USART2_UART_Init(void);
-static void MX_I2C1_Init(void);
-static void MX_ADC1_Init(void);
 static void MX_USART6_UART_Init(void);
+static void MX_I2C1_Init(void);
 static void MX_TIM3_Init(void);
+static void MX_ADC1_Init(void);
 /* USER CODE BEGIN PFP */
 void bluetooth_Event();
 /* USER CODE END PFP */
@@ -97,7 +99,6 @@ int main(void)
 {
 
   /* USER CODE BEGIN 1 */
-
 	char led_buffer1[17];
 	char led_buffer2[17];
   /* USER CODE END 1 */
@@ -120,56 +121,78 @@ int main(void)
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
+  MX_DMA_Init();
   MX_USART2_UART_Init();
-  MX_I2C1_Init();
-  MX_ADC1_Init();
   MX_USART6_UART_Init();
+  MX_I2C1_Init();
   MX_TIM3_Init();
+  MX_ADC1_Init();
   /* USER CODE BEGIN 2 */
   HAL_UART_Receive_IT(&huart2, &rx2char,1);
   HAL_UART_Receive_IT(&huart6, &btchar,1);
   DHT11_Init();
   LCD_init(&hi2c1);
-  DHT11_TypeDef dht11Data;
+
+
   char buff[30];
-  LCD_writeStringXY(0, 0, "hello lcd!");
-  printf("start main() \r\n");
-  if(HAL_ADC_Start_IT(&hadc1) != HAL_OK)
-	  Error_Handler();
+
+  printf("start main() dht\r\n");
+  LCD_writeStringXY(0, 0, "hello lcd");
+//  if(HAL_ADC_Start_IT(&hadc1) != HAL_OK)
+//  	  Error_Handler();
+  if(HAL_ADC_Start_DMA(&hadc1,(uint32_t)ADCxConvertValue,2) != HAL_OK)
+  	  Error_Handler();
+
+//  char buf[10] = "Hello\r";
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-
-	  if(adcFlag)
+	  dht11Data = DHT11_readData();
+	  if(rx2Flag)
 	  {
-		  if(rx2Flag)
-		  	  {
-		  			printf("recv2 : %s\r\n",rx2Data);
-		  			rx2Flag =0;
-		  	//	    HAL_UART_Transmit(&huart6, (uint8_t *)buf, strlen(buf), 0xFFFF);
-		  	  }
-		  if(btFlag)
-		  	  {
-		  //		printf("bt : %s\r\n",btData);
-		  			btFlag =0;
-		  			bluetooth_Event();
-		  	  }
-		  dht11Data = DHT11_readData();
-		  adcFlag=0;
-		  sprintf(led_buffer1,"VAR : %d      ",ADCxConvertValue[0]);
-		  sprintf(led_buffer2,"CDS : %d      ",ADCxConvertValue[1]);
-		  sprintf(buff,"h: %d%% t: %d.%d'C", dht11Data.rh_byte1, dht11Data.temp_byte1, dht11Data.temp_byte2);
-		  LCD_writeStringXY(0, 0, led_buffer1);
-		  LCD_writeStringXY(1, 0, led_buffer2);
-		  printf("VAR=%4d,  , CDS=%4d\r\n",ADCxConvertValue[0],ADCxConvertValue[1]);
-		  printf("%s\r\n", buff);
-		  if(HAL_ADC_Start_IT(&hadc1) != HAL_OK)
-			  Error_Handler();
+
+		  printf("recv2 : %s\r\n",rx2Data);
+		  rx2Flag =0;
+		  //	    HAL_UART_Transmit(&huart6, (uint8_t *)buf, strlen(buf), 0xFFFF);
 	  }
+	  if(btFlag)
+	  {
+
+		  //		printf("bt : %s\r\n",btData);
+		  btFlag =0;
+		  bluetooth_Event();
+	  }
+	  if(adcFlag)
+	  	  {
+	  		  adcFlag=0;
+//	  		  sprintf(led_buffer1,"VAR : %d      ",ADCxConvertValue[0]);
+//	  		  sprintf(led_buffer2,"CDS : %d      ",ADCxConvertValue[1]);
+//	  		  LCD_writeStringXY(0, 0, led_buffer1);
+//	  		  LCD_writeStringXY(1, 0, led_buffer2);
+//	  		  if(HAL_ADC_Start_IT(&hadc1) != HAL_OK)
+//	  			  Error_Handler();
+	  	  }
+
+	  sprintf(led_buffer1,"VAR : %d      ",ADCxConvertValue[0]);
+	  sprintf(led_buffer2,"CDS : %d      ",ADCxConvertValue[1]);
+	  sprintf(buff,"h: %d%% t: %d.%d'C", dht11Data.rh_byte1, dht11Data.temp_byte1, dht11Data.temp_byte2);
+	  printf("VAR=%4d,  , CDS=%4d\r\n",ADCxConvertValue[0],ADCxConvertValue[1]);
+	  printf("%s\r\n", buff);
+	  LCD_writeStringXY(0, 0, led_buffer1);
+	  LCD_writeStringXY(1, 0, led_buffer2);
+	  if(HAL_ADC_Start_DMA(&hadc1,(uint32_t)ADCxConvertValue,2) != HAL_OK)
+	  			  Error_Handler();
+
+	  //LCD_writeStringXY(1, 0, buff);
 	  HAL_Delay(1000);
+
+
+//	  HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_13);
+//	  HAL_Delay(500);
+
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -244,7 +267,7 @@ static void MX_ADC1_Init(void)
   /** Configure the global features of the ADC (Clock, Resolution, Data Alignment and number of conversion)
   */
   hadc1.Instance = ADC1;
-  hadc1.Init.ClockPrescaler = ADC_CLOCK_SYNC_PCLK_DIV6;
+  hadc1.Init.ClockPrescaler = ADC_CLOCK_SYNC_PCLK_DIV4;
   hadc1.Init.Resolution = ADC_RESOLUTION_12B;
   hadc1.Init.ScanConvMode = ENABLE;
   hadc1.Init.ContinuousConvMode = DISABLE;
@@ -253,7 +276,7 @@ static void MX_ADC1_Init(void)
   hadc1.Init.ExternalTrigConv = ADC_SOFTWARE_START;
   hadc1.Init.DataAlign = ADC_DATAALIGN_RIGHT;
   hadc1.Init.NbrOfConversion = 2;
-  hadc1.Init.DMAContinuousRequests = DISABLE;
+  hadc1.Init.DMAContinuousRequests = ENABLE;
   hadc1.Init.EOCSelection = ADC_EOC_SINGLE_CONV;
   if (HAL_ADC_Init(&hadc1) != HAL_OK)
   {
@@ -300,7 +323,7 @@ static void MX_I2C1_Init(void)
 
   /* USER CODE END I2C1_Init 1 */
   hi2c1.Instance = I2C1;
-  hi2c1.Init.ClockSpeed = 100000;
+  hi2c1.Init.ClockSpeed = 10000;
   hi2c1.Init.DutyCycle = I2C_DUTYCYCLE_2;
   hi2c1.Init.OwnAddress1 = 0;
   hi2c1.Init.AddressingMode = I2C_ADDRESSINGMODE_7BIT;
@@ -430,6 +453,22 @@ static void MX_USART6_UART_Init(void)
 }
 
 /**
+  * Enable DMA controller clock
+  */
+static void MX_DMA_Init(void)
+{
+
+  /* DMA controller clock enable */
+  __HAL_RCC_DMA2_CLK_ENABLE();
+
+  /* DMA interrupt init */
+  /* DMA2_Stream0_IRQn interrupt configuration */
+  HAL_NVIC_SetPriority(DMA2_Stream0_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(DMA2_Stream0_IRQn);
+
+}
+
+/**
   * @brief GPIO Initialization Function
   * @param None
   * @retval None
@@ -438,7 +477,6 @@ static void MX_GPIO_Init(void)
 {
   GPIO_InitTypeDef GPIO_InitStruct = {0};
   /* USER CODE BEGIN MX_GPIO_Init_1 */
-
   /* USER CODE END MX_GPIO_Init_1 */
 
   /* GPIO Ports Clock Enable */
@@ -474,24 +512,10 @@ static void MX_GPIO_Init(void)
   HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
 
   /* USER CODE BEGIN MX_GPIO_Init_2 */
-
   /* USER CODE END MX_GPIO_Init_2 */
 }
 
 /* USER CODE BEGIN 4 */
-/**
-  * @brief  Retargets the C library printf function to the USART.
-  * @param  None
-  * @retval None
-  */
-PUTCHAR_PROTOTYPE
-{
-  /* Place your implementation of fputc here */
-  /* e.g. write a character to the USART6 and Loop until the end of transmission */
-  HAL_UART_Transmit(&huart2, (uint8_t *)&ch, 1, 0xFFFF);
-
-  return ch;
-}
 void MX_GPIO_LED_ON(int pin)
 {
 	HAL_GPIO_WritePin(LD2_GPIO_Port, pin, GPIO_PIN_SET);
@@ -554,6 +578,18 @@ void bluetooth_Event()
 			MX_GPIO_TEST_LED_OFF(TEST_LED_Pin);	//PC12 Low
 		}
   }
+
+  else if (!strcmp(pArray[1], "SEND"))
+  {
+
+	  //char sendBuf[100];
+	  snprintf(sendBuf, sizeof(sendBuf),"Temp: %d.%d'C, Humi: %d%%, VAR: %4d, CDS: %4d\r\n",dht11Data.temp_byte1,dht11Data.temp_byte2,dht11Data.rh_byte1,ADCxConvertValue[0], ADCxConvertValue[1]);
+	  HAL_UART_Transmit(&huart6, (uint8_t *)sendBuf, strlen(sendBuf), HAL_MAX_DELAY);
+
+  }
+
+
+
   else if(!strncmp(pArray[1]," New conn",sizeof(" New conn")))
   {
       return;
@@ -568,6 +604,19 @@ void bluetooth_Event()
   sprintf(sendBuf,"[%s]%s@%s\n",pArray[0],pArray[1],pArray[2]);
   HAL_UART_Transmit(&huart6, (uint8_t *)sendBuf, strlen(sendBuf), 0xFFFF);
 
+}
+/**
+  * @brief  Retargets the C library printf function to the USART.
+  * @param  None
+  * @retval None
+  */
+PUTCHAR_PROTOTYPE
+{
+  /* Place your implementation of fputc here */
+  /* e.g. write a character to the USART6 and Loop until the end of transmission */
+  HAL_UART_Transmit(&huart2, (uint8_t *)&ch, 1, 0xFFFF);
+
+  return ch;
 }
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 {
@@ -606,18 +655,19 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 }
 void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc)
 {
-	static int channel=0;
-	if(channel ==0)
-	{
-		ADCxConvertValue[channel] = HAL_ADC_GetValue(hadc);
-		channel = 1;
-	}
-	else if(channel ==1)
-	{
-		ADCxConvertValue[channel] = HAL_ADC_GetValue(hadc);
-		channel = 0;
-		adcFlag=1;
-	}
+	adcFlag=1;
+//	static int channel=0;
+//	if(channel ==0)
+//	{
+//		ADCxConvertValue[channel] = HAL_ADC_GetValue(hadc);
+//		channel = 1;
+//	}
+//	else if(channel ==1)
+//	{
+//		ADCxConvertValue[channel] = HAL_ADC_GetValue(hadc);
+//		channel = 0;
+//		adcFlag=1;
+//	}
 }
 //void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) // ✅ 올바른 이름
 //{
@@ -626,6 +676,12 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc)
 //		tim3SecCnt++;
 //		time3SecFlag=1;
 //		HAL_GPIO_TogglePin(LD2_GPIO_Port,LD2_Pin);
+//	}
+//	if(time3Cnt >= 1000)// 		1ms * 1000 = 1sec
+//	{
+//		time3SecFlag = 1;
+//		tim3SecCnt++;
+//		time3Cnt = 0;
 //	}
 //}
 /* USER CODE END 4 */
